@@ -5,6 +5,8 @@ import PendingCoursesTable from '../components/PendingCoursesTable';
 import { calculateCGPA, calculatePredictedCGPA } from '../utils/cgpaUtils';
 import CGPATrendChart from '../components/CGPATrendChart';
 import ExportButtons from '../components/ExportButtons';
+import * as pdfjsLib from 'pdfjs-dist/build/pdf';
+pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.js`;
 
 const steps = [
   'Upload PDFs',
@@ -63,6 +65,113 @@ function getCategoryUnitGaps(required, completed, pending) {
   return gaps;
 }
 
+// --- PDF Parsing Logic (moved from API routes) ---
+function parsePerformanceText(text) {
+  try {
+    const startIdx = text.indexOf('Completed Courses/Registered Courses');
+    if (startIdx === -1) {
+      return { courses: [], error: 'Could not find course section' };
+    }
+    let section = text.slice(startIdx);
+    const endIdx = section.indexOf('Pending Courses');
+    if (endIdx !== -1) section = section.slice(0, endIdx);
+    const lines = section.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    let courses = [];
+    let semester = '';
+    let i = 0;
+    while (i < lines.length) {
+      if (/SEMESTER/.test(lines[i])) {
+        semester = lines[i];
+        i++;
+        continue;
+      }
+      if (/^[A-Z]{2,}\s*F\d{3}/.test(lines[i])) {
+        let courseNos = [];
+        while (i < lines.length && /^[A-Z]{2,}\s*F\d{3}/.test(lines[i])) {
+          courseNos.push(lines[i]);
+          i++;
+        }
+        let courseTitles = [];
+        while (i < lines.length && /[A-Z]/.test(lines[i][0])) {
+          courseTitles.push(lines[i]);
+          i++;
+        }
+        let units = [];
+        while (i < lines.length && /^\d+$/.test(lines[i])) {
+          units.push(Number(lines[i]));
+          i++;
+        }
+        let grades = [];
+        while (i < lines.length && /^[A-F][+-]?|RC|GD|NC|R|W|I|EX|IP|P$/.test(lines[i])) {
+          grades.push(lines[i]);
+          i++;
+        }
+        const n = Math.min(courseNos.length, courseTitles.length, units.length, grades.length);
+        for (let j = 0; j < n; j++) {
+          courses.push({
+            courseNo: courseNos[j],
+            courseTitle: courseTitles[j],
+            units: units[j],
+            grade: grades[j],
+            semester
+          });
+        }
+      } else {
+        i++;
+      }
+    }
+    return { courses };
+  } catch (error) {
+    return { courses: [], error: error.message };
+  }
+}
+
+function parseStructureText(text) {
+  try {
+    const lines = text.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    let categories = [];
+    let inTable = false;
+    for (let i = 0; i < lines.length; i++) {
+      if (/^\(I\)/.test(lines[i])) inTable = true;
+      if (inTable && /^Total/.test(lines[i])) break;
+      if (inTable && /Requirement|Elective|Foundation|Core|Practice|Thesis|Sub-Total/i.test(lines[i])) {
+        const match = lines[i].match(/([A-Za-z\s\-/&]+)(\d+)(\d+)(\d+)(\d+)?(\d+)?(\d+)?/);
+        if (match) {
+          categories.push({
+            category: match[1].trim(),
+            numCourses: parseInt(match[2]),
+            unitsRequired: parseInt(match[4]),
+          });
+        }
+      }
+    }
+    let courseListSection = text.split('ThefollowingcoursesareneededtomeettheGeneralInstitutionalRequirement:')[1] || '';
+    let courseLines = courseListSection.split(/\r?\n/).map(l => l.trim()).filter(Boolean);
+    let courseEntries = [];
+    for (let line of courseLines) {
+      const match = line.match(/^([A-Za-z\s]+)-\s*(.+)$/);
+      if (match) {
+        const category = match[1].replace(/([a-z])([A-Z])/g, '$1 $2').trim();
+        let courses = match[2].replace(/and/g, ',').split(',').map(s => s.replace(/\.$/, '').trim());
+        for (let courseTitle of courses) {
+          if (courseTitle) {
+            let cat = categories.find(c => c.category.replace(/\s/g, '').toLowerCase().includes(category.replace(/\s/g, '').toLowerCase()));
+            courseEntries.push({
+              category,
+              courseTitle,
+              unitsRequired: cat ? cat.unitsRequired : null
+            });
+          }
+        }
+      }
+    }
+    return { courses: courseEntries };
+  } catch (error) {
+    return { courses: [], error: error.message };
+  }
+}
+// --- End PDF Parsing Logic ---
+
 export default function Home() {
   const [activeStep, setActiveStep] = useState(0);
   const [perfResult, setPerfResult] = useState(null);
@@ -72,64 +181,41 @@ export default function Home() {
   const [pendingCourses, setPendingCourses] = useState([]);
   const [error, setError] = useState(null);
 
-  // Handlers for file upload
-  const handleUpload = async (e, endpoint, setResult, setLoading) => {
+  // Client-side PDF parsing handler
+  const handlePdfUpload = async (e, parser, setResult, setLoading) => {
     try {
       setError(null);
       setLoading(true);
       setResult(null);
-      
       const file = e.target.files[0];
       if (!file) {
         setError('No file selected');
         setLoading(false);
         return;
       }
-
-      console.log('Uploading file:', file.name, 'Size:', file.size);
-
-      const formData = new FormData();
-      formData.append('file', file);
-      
-      console.log('Sending request to:', endpoint);
-      
-      const res = await fetch(endpoint, {
-        method: 'POST',
-        body: formData,
-      });
-
-      console.log('Response status:', res.status);
-      
-      if (!res.ok) {
-        const errorText = await res.text();
-        console.error('API Error:', errorText);
-        throw new Error(`API Error: ${res.status} - ${errorText}`);
+      const arrayBuffer = await file.arrayBuffer();
+      const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
+      let text = '';
+      for (let i = 1; i <= pdf.numPages; i++) {
+        const page = await pdf.getPage(i);
+        const content = await page.getTextContent();
+        text += content.items.map(item => item.str).join(' ') + '\n';
       }
-
-      const data = await res.json();
-      console.log('API Response:', data);
-      
-      if (data.error) {
-        throw new Error(data.error);
-      }
-      
-      setResult(data);
+      const parsed = parser(text);
+      setResult(parsed);
     } catch (err) {
-      console.error('Upload error:', err);
-      setError(`Upload failed: ${err.message}`);
+      setError(`PDF parsing failed: ${err.message}`);
     } finally {
       setLoading(false);
     }
   };
 
-  // When both PDFs are parsed, compute pending courses
   React.useEffect(() => {
     if (perfResult && structResult) {
       setPendingCourses(getPendingCourses(structResult.courses, perfResult.courses));
     }
   }, [perfResult, structResult]);
 
-  // Handlers for pending course edits
   const handlePendingGradeChange = (idx, value) => {
     setPendingCourses(prev => prev.map((c, i) => i === idx ? { ...c, expectedGrade: value } : c));
   };
@@ -137,7 +223,6 @@ export default function Home() {
     setPendingCourses(prev => prev.map((c, i) => i === idx ? { ...c, units: Number(value) } : c));
   };
 
-  // CGPA calculations
   const completedCourses = perfResult ? perfResult.courses : [];
   const requiredCourses = structResult ? structResult.courses : [];
   const currentCGPA = calculateCGPA(completedCourses);
@@ -145,14 +230,10 @@ export default function Home() {
   const { completedUnits, pendingUnits, requiredUnits } = getUnitsSummary(completedCourses, pendingCourses, requiredCourses);
   const categoryGaps = getCategoryUnitGaps(requiredCourses, completedCourses, pendingCourses);
 
-  // Step content
   const stepContent = [
-    // Step 1: Upload PDFs
     <Box key="upload">
       {error && (
-        <Alert severity="error" sx={{ mb: 2 }}>
-          {error}
-        </Alert>
+        <Alert severity="error" sx={{ mb: 2 }}>{error}</Alert>
       )}
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
@@ -161,7 +242,7 @@ export default function Home() {
             <input
               type="file"
               accept="application/pdf"
-              onChange={e => handleUpload(e, '/api/parsePerformance', setPerfResult, setPerfLoading)}
+              onChange={e => handlePdfUpload(e, parsePerformanceText, setPerfResult, setPerfLoading)}
               style={{ margin: '16px 0' }}
             />
             {perfLoading && <Typography>Parsing...</Typography>}
@@ -179,7 +260,7 @@ export default function Home() {
             <input
               type="file"
               accept="application/pdf"
-              onChange={e => handleUpload(e, '/api/parseStructure', setStructResult, setStructLoading)}
+              onChange={e => handlePdfUpload(e, parseStructureText, setStructResult, setStructLoading)}
               style={{ margin: '16px 0' }}
             />
             {structLoading && <Typography>Parsing...</Typography>}
@@ -203,7 +284,6 @@ export default function Home() {
         </Button>
       </Box>
     </Box>,
-    // Step 2: Review Courses
     <Box key="review">
       <CourseTable courses={completedCourses} />
       <PendingCoursesTable
@@ -223,7 +303,6 @@ export default function Home() {
         </Button>
       </Box>
     </Box>,
-    // Step 3: Predict CGPA
     <Box key="predict">
       <Card sx={{ mb: 3 }}>
         <CardContent>
@@ -259,7 +338,6 @@ export default function Home() {
         </Button>
       </Box>
     </Box>,
-    // Step 4: Export Report
     <Box key="export">
       <Typography variant="h6" gutterBottom>Export/Download Report</Typography>
       <ExportButtons
