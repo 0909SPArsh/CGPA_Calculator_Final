@@ -1,5 +1,5 @@
 import React, { useState } from 'react';
-import { Box, Button, Step, StepLabel, Stepper, Typography, Grid, Paper, Card, CardContent } from '@mui/material';
+import { Box, Button, Step, StepLabel, Stepper, Typography, Grid, Paper, Card, CardContent, Alert } from '@mui/material';
 import CourseTable from '../components/CourseTable';
 import PendingCoursesTable from '../components/PendingCoursesTable';
 import { calculateCGPA, calculatePredictedCGPA } from '../utils/cgpaUtils';
@@ -70,22 +70,56 @@ export default function Home() {
   const [perfLoading, setPerfLoading] = useState(false);
   const [structLoading, setStructLoading] = useState(false);
   const [pendingCourses, setPendingCourses] = useState([]);
+  const [error, setError] = useState(null);
 
   // Handlers for file upload
   const handleUpload = async (e, endpoint, setResult, setLoading) => {
-    setLoading(true);
-    setResult(null);
-    const file = e.target.files[0];
-    if (!file) return;
-    const formData = new FormData();
-    formData.append('file', file);
-    const res = await fetch(endpoint, {
-      method: 'POST',
-      body: formData,
-    });
-    const data = await res.json();
-    setResult(data);
-    setLoading(false);
+    try {
+      setError(null);
+      setLoading(true);
+      setResult(null);
+      
+      const file = e.target.files[0];
+      if (!file) {
+        setError('No file selected');
+        setLoading(false);
+        return;
+      }
+
+      console.log('Uploading file:', file.name, 'Size:', file.size);
+
+      const formData = new FormData();
+      formData.append('file', file);
+      
+      console.log('Sending request to:', endpoint);
+      
+      const res = await fetch(endpoint, {
+        method: 'POST',
+        body: formData,
+      });
+
+      console.log('Response status:', res.status);
+      
+      if (!res.ok) {
+        const errorText = await res.text();
+        console.error('API Error:', errorText);
+        throw new Error(`API Error: ${res.status} - ${errorText}`);
+      }
+
+      const data = await res.json();
+      console.log('API Response:', data);
+      
+      if (data.error) {
+        throw new Error(data.error);
+      }
+      
+      setResult(data);
+    } catch (err) {
+      console.error('Upload error:', err);
+      setError(`Upload failed: ${err.message}`);
+    } finally {
+      setLoading(false);
+    }
   };
 
   // When both PDFs are parsed, compute pending courses
@@ -115,6 +149,11 @@ export default function Home() {
   const stepContent = [
     // Step 1: Upload PDFs
     <Box key="upload">
+      {error && (
+        <Alert severity="error" sx={{ mb: 2 }}>
+          {error}
+        </Alert>
+      )}
       <Grid container spacing={3}>
         <Grid item xs={12} md={6}>
           <Paper sx={{ p: 3 }}>
@@ -127,7 +166,10 @@ export default function Home() {
             />
             {perfLoading && <Typography>Parsing...</Typography>}
             {perfResult && (
-              <Typography color="success.main">Parsed {perfResult.courses.length} courses.</Typography>
+              <Typography color="success.main">
+                Parsed {perfResult.courses.length} courses.
+                {perfResult.error && <span style={{color: 'red'}}> Warning: {perfResult.error}</span>}
+              </Typography>
             )}
           </Paper>
         </Grid>
@@ -142,7 +184,10 @@ export default function Home() {
             />
             {structLoading && <Typography>Parsing...</Typography>}
             {structResult && (
-              <Typography color="success.main">Parsed {structResult.courses.length} required courses.</Typography>
+              <Typography color="success.main">
+                Parsed {structResult.courses.length} required courses.
+                {structResult.error && <span style={{color: 'red'}}> Warning: {structResult.error}</span>}
+              </Typography>
             )}
           </Paper>
         </Grid>
