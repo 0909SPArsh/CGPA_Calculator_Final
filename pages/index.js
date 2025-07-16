@@ -32,7 +32,6 @@ function getUnitsSummary(completed, pending, required) {
 }
 
 function getCategoryUnitGaps(required, completed, pending) {
-  // Group by category
   const requiredByCat = {};
   required.forEach(c => {
     if (!requiredByCat[c.category]) requiredByCat[c.category] = 0;
@@ -48,7 +47,6 @@ function getCategoryUnitGaps(required, completed, pending) {
     if (!pendingByCat[c.category]) pendingByCat[c.category] = 0;
     pendingByCat[c.category] += c.units || 0;
   });
-  // Calculate gaps
   const gaps = [];
   for (const cat in requiredByCat) {
     const done = (completedByCat[cat] || 0) + (pendingByCat[cat] || 0);
