@@ -5,8 +5,6 @@ import PendingCoursesTable from '../components/PendingCoursesTable';
 import { calculateCGPA, calculatePredictedCGPA } from '../utils/cgpaUtils';
 import CGPATrendChart from '../components/CGPATrendChart';
 import ExportButtons from '../components/ExportButtons';
-import * as pdfjsLib from 'pdfjs-dist/build/pdf';
-pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.js`;
 
 const steps = [
   'Upload PDFs',
@@ -191,6 +189,9 @@ export default function Home() {
         setLoading(false);
         return;
       }
+      // Dynamically import pdfjs-dist only in the browser
+      const pdfjsLib = await import('pdfjs-dist/build/pdf');
+      pdfjsLib.GlobalWorkerOptions.workerSrc = `//cdnjs.cloudflare.com/ajax/libs/pdf.js/${pdfjsLib.version}/pdf.worker.js`;
       const arrayBuffer = await file.arrayBuffer();
       const pdf = await pdfjsLib.getDocument({ data: arrayBuffer }).promise;
       let text = '';
