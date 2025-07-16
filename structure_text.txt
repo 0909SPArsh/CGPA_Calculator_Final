@@ -1,0 +1,44 @@
+
+
+Category-Wise Academic Structure for M.Sc.(Mathematics) with B.E.(E&E)
+Student ID No.
+2022B4A31042G
+Student Name
+Sparsh Upadhyay
+CategoryNo. of CoursesNo. of Units
+R*C*P*R*C*P*
+(I) General Institutional Requirement
+Engineering Foundation220660
+General Awareness / Professional Courses220660
+Humanities Electives321862
+Mathematics Foundation44012120
+Science Foundation66012120
+Technical Arts44010100
+Sub-Total2120154522
+(II) Discipline Requirement
+Core27225876918
+B4 Elective5231578
+A3 Elective40412012
+Sub-Total3624121147638
+Course-Work Sub-Total57441316812840
+(III) B4 Practice School/Thesis 
+PS-I110550
+PS-II/Thesis10120020
+(IV) A3 Practice School/Thesis  
+PS-II/Thesis10120020
+Total60451521313380
+*Note: R- Required, C- Completed, P- Pending
+ThefollowingcoursesareneededtomeettheGeneralInstitutionalRequirement:
+EngineeringFoundation- ElectricalSciencesandThermodynamicsforallprogramsexceptA5.ForA5program,it is
+ThermodynamicsandProcessEngineering
+GeneralAwareness/   ProfessionalCourses-   PrinciplesofEconomicsorPrinciplesofManagementand
+EnvironmentalStudies
+MathematicsFoundation- MathematicsI, MathematicsII andMathematicsIIIforallprogramsexceptA5.ForA5
+program,MathematicsI,MathematicsIIandMathematicsIIImayreplaceGeneralMathematicsI,General
+MathematicsII andGeneralMathematicsIII (A studentmustpursueallthreecoursesin onesequenceonly)
+ScienceFoundation-  GeneralBiology,BiologyLaboratory,GeneralChemistry,ChemistryLaboratory,Mechanics,
+OscillationsandWavesandPhysicsLaboratoryforallprogramsexceptA5.ForA5program,GeneralPhysicsmay
+replaceMechanics,OscillationsandWaves
+TechnicalArts- ComputerProgramming,WorkshopPractice,EngineeringGraphicsandTechnicalReportWriting
+Forthelistof coursesunderHumanitiesElectives,DisciplineCoreandElectives,refertothelatestbulletin.
+For any queries, please contact AUGSD Office.                                                     Report generated on 15-Jul-2025
