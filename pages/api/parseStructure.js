@@ -1,4 +1,3 @@
-import formidable from 'formidable';
 import fs from 'fs';
 import pdfParse from 'pdf-parse';
 
@@ -69,6 +68,8 @@ export default async function handler(req, res) {
   }
 
   try {
+    // Dynamic import to fix formidable issue
+    const formidable = require('formidable');
     const form = new formidable.IncomingForm({
       maxFileSize: 10 * 1024 * 1024, // 10MB limit
     });
